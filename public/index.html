@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STOP Multiplayer</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <p class="eyebrow">Realtime Party Game</p>
+        <h1>STOP Multiplayer</h1>
+        <p class="subtitle">Create a room, pick categories, race to fill answers, and call STOP before time runs out.</p>
+      </header>
+
+      <p id="notice" class="notice hidden"></p>
+
+      <section id="auth-panel" class="panel">
+        <div class="card">
+          <h2>Start Here</h2>
+          <label for="player-name">Your Name</label>
+          <input id="player-name" type="text" maxlength="24" placeholder="Player name" autocomplete="nickname" />
+
+          <div class="auth-actions">
+            <button id="create-room-btn" class="btn-primary">Create Room</button>
+          </div>
+
+          <div class="divider">or</div>
+
+          <label for="room-code">Join Existing Room</label>
+          <div class="join-row">
+            <input id="room-code" type="text" maxlength="5" placeholder="ABCDE" autocomplete="off" />
+            <button id="join-room-btn" class="btn-secondary">Join</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="game-panel" class="panel hidden">
+        <div class="status-bar card">
+          <div>
+            <p class="meta-label">Room</p>
+            <p id="room-code-display" class="meta-value">-</p>
+          </div>
+          <div>
+            <p class="meta-label">You</p>
+            <p id="my-name-display" class="meta-value">-</p>
+          </div>
+          <div>
+            <p class="meta-label">State</p>
+            <p id="phase-display" class="meta-value">Lobby</p>
+          </div>
+          <button id="leave-room-btn" class="btn-ghost">Leave Room</button>
+        </div>
+
+        <div class="game-grid">
+          <aside class="card players-card">
+            <h2>Players</h2>
+            <ul id="players-list" class="players-list"></ul>
+          </aside>
+
+          <section class="card gameplay-card">
+            <div id="settings-panel" class="settings-panel">
+              <h2>Round Settings</h2>
+              <label for="categories-input">Categories (comma or line separated)</label>
+              <textarea id="categories-input" rows="3"></textarea>
+
+              <label for="round-seconds-input">Round Time (seconds)</label>
+              <input id="round-seconds-input" type="number" min="20" max="180" step="1" />
+
+              <div class="settings-actions">
+                <button id="save-settings-btn" class="btn-secondary">Save Settings</button>
+                <button id="start-round-btn" class="btn-primary">Start Round</button>
+              </div>
+            </div>
+
+            <div id="categories-preview" class="categories-preview"></div>
+
+            <section id="round-panel" class="round-panel hidden">
+              <div class="round-top">
+                <div>
+                  <p class="meta-label">Round</p>
+                  <p id="round-number-display" class="meta-value">1</p>
+                </div>
+                <div class="letter-tile">
+                  <p class="meta-label">Letter</p>
+                  <p id="round-letter-display" class="letter-value">A</p>
+                </div>
+                <div>
+                  <p class="meta-label">Time Left</p>
+                  <p id="timer-display" class="meta-value">60.0s</p>
+                </div>
+              </div>
+
+              <form id="answers-form" class="answers-form"></form>
+
+              <div class="round-actions">
+                <button id="submit-answers-btn" class="btn-primary" type="button">Submit Answers</button>
+                <button id="call-stop-btn" class="btn-danger" type="button">Call STOP</button>
+              </div>
+
+              <p id="submitted-note" class="submitted-note hidden">Answers submitted. Waiting for everyone else.</p>
+            </section>
+
+            <section id="results-panel" class="results-panel hidden">
+              <h2>Round Results</h2>
+              <div id="results-container"></div>
+            </section>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
