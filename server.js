@@ -9,11 +9,36 @@ const HOST = process.env.HOST || "0.0.0.0";
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const DEFAULT_CATEGORIES = ["Name", "Country", "Animal", "Food", "Color"];
 
+function parseAllowedOrigins(value) {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.CLIENT_ORIGINS || process.env.CLIENT_ORIGIN || "");
+
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : true,
+    methods: ["GET", "POST"]
+  }
+});
 
 app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/health", (_req, res) => {
+  res.json({
+    ok: true,
+    rooms: rooms.size
+  });
+});
 
 const rooms = new Map();
 const roundTimers = new Map();
@@ -571,4 +596,7 @@ io.on("connection", (socket) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`STOP multiplayer server running on http://${HOST}:${PORT}`);
+  console.log(
+    `Socket CORS origins: ${ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS.join(", ") : "* (all origins)"}`
+  );
 });

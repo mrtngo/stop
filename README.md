@@ -46,3 +46,24 @@ http://localhost:3000
 
 - Minimum players per round: `2`
 - Answers are checked only by first-letter match (dictionary validation is not enforced)
+
+## Deploy for multiplayer (Vercel + Render/Railway/Fly)
+
+This app needs a long-running Socket.IO server, so deploy backend and frontend separately:
+
+1. Deploy backend (`server.js`) to Render/Railway/Fly.io.
+2. Set backend env vars:
+   - `PORT` (provided by platform)
+   - `HOST=0.0.0.0`
+   - `CLIENT_ORIGINS=https://your-frontend.vercel.app`
+3. Confirm backend is live:
+   - `https://your-backend-domain/health` should return JSON with `"ok": true`
+4. Deploy frontend on Vercel (static files from `public/`).
+5. In the app UI on Vercel, set **Realtime Server URL** to your backend domain:
+   - Example: `https://your-backend-domain`
+
+You can also pass the backend once in URL:
+
+```text
+https://your-frontend.vercel.app/?server=https://your-backend-domain
+```

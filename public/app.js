@@ -1,11 +1,10 @@
-const socket = io();
-
 const authPanel = document.getElementById("auth-panel");
 const gamePanel = document.getElementById("game-panel");
 
 const noticeEl = document.getElementById("notice");
 const playerNameInput = document.getElementById("player-name");
 const roomCodeInput = document.getElementById("room-code");
+const serverUrlInput = document.getElementById("server-url");
 const createRoomBtn = document.getElementById("create-room-btn");
 const joinRoomBtn = document.getElementById("join-room-btn");
 const leaveRoomBtn = document.getElementById("leave-room-btn");
@@ -38,10 +37,49 @@ let roomState = null;
 let latestResults = null;
 let activeRoundNumber = null;
 let timerInterval = null;
+let socket = null;
+let socketServerUrl = null;
 
-const savedName = localStorage.getItem("stop_name");
-if (savedName) {
-  playerNameInput.value = savedName;
+function normalizeServerUrl(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const needsProtocol = !/^https?:\/\//i.test(trimmed);
+  const localMatch = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?($|\/)/i.test(trimmed);
+  const withProtocol = needsProtocol ? `${localMatch ? "http" : "https"}://${trimmed}` : trimmed;
+
+  try {
+    const parsed = new URL(withProtocol);
+    parsed.pathname = "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function getDesiredServerUrl() {
+  const raw = serverUrlInput.value.trim();
+  if (!raw) {
+    localStorage.removeItem("stop_server_url");
+    return window.location.origin;
+  }
+
+  const normalized = normalizeServerUrl(raw);
+  if (!normalized) {
+    return "";
+  }
+
+  serverUrlInput.value = normalized;
+  localStorage.setItem("stop_server_url", normalized);
+  return normalized;
 }
 
 function showNotice(message, isError = true) {
@@ -95,6 +133,66 @@ function getRequiredName() {
 
   localStorage.setItem("stop_name", name);
   return name;
+}
+
+function resetLocalRoomState() {
+  roomState = null;
+  latestResults = null;
+  activeRoundNumber = null;
+  clearTimer();
+}
+
+function bindSocketEvents(nextSocket) {
+  nextSocket.on("room_state", (nextState) => {
+    roomState = nextState;
+    renderGameState();
+  });
+
+  nextSocket.on("round_results", (results) => {
+    latestResults = results;
+    renderResults(results);
+  });
+
+  nextSocket.on("connect", () => {
+    showNotice("");
+  });
+
+  nextSocket.on("connect_error", (error) => {
+    const reason = error?.message ? ` (${error.message})` : "";
+    showNotice(`Could not connect to realtime server ${socketServerUrl || ""}${reason}`);
+  });
+}
+
+function getSocket() {
+  if (typeof io !== "function") {
+    showNotice("Socket.IO client failed to load. Refresh and try again.");
+    return null;
+  }
+
+  const desiredUrl = getDesiredServerUrl();
+  if (!desiredUrl) {
+    showNotice("Enter a valid realtime server URL.");
+    return null;
+  }
+
+  if (socket && socketServerUrl === desiredUrl) {
+    if (!socket.connected) {
+      socket.connect();
+    }
+    return socket;
+  }
+
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+  }
+
+  socketServerUrl = desiredUrl;
+  socket = io(socketServerUrl, {
+    transports: ["websocket", "polling"]
+  });
+  bindSocketEvents(socket);
+  return socket;
 }
 
 function buildCategoryPreview(categories) {
@@ -254,11 +352,13 @@ function renderGameState() {
   if (!roomState) {
     authPanel.classList.remove("hidden");
     gamePanel.classList.add("hidden");
+    serverUrlInput.disabled = false;
     return;
   }
 
   authPanel.classList.add("hidden");
   gamePanel.classList.remove("hidden");
+  serverUrlInput.disabled = true;
 
   const me = roomState.players.find((player) => player.id === roomState.me);
   const isHost = roomState.hostId === roomState.me;
@@ -312,14 +412,52 @@ function renderGameState() {
   }
 }
 
+const savedName = localStorage.getItem("stop_name");
+if (savedName) {
+  playerNameInput.value = savedName;
+}
+
+const queryServerUrl = normalizeServerUrl(new URLSearchParams(window.location.search).get("server"));
+const savedServerUrl = normalizeServerUrl(localStorage.getItem("stop_server_url"));
+serverUrlInput.value = queryServerUrl || savedServerUrl || window.location.origin;
+
+serverUrlInput.addEventListener("change", () => {
+  const raw = serverUrlInput.value.trim();
+  if (!raw) {
+    localStorage.removeItem("stop_server_url");
+    serverUrlInput.value = window.location.origin;
+  } else {
+    const normalized = normalizeServerUrl(raw);
+    if (!normalized) {
+      showNotice("Enter a valid realtime server URL.");
+      return;
+    }
+
+    serverUrlInput.value = normalized;
+    localStorage.setItem("stop_server_url", normalized);
+  }
+
+  if (socket && !roomState) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+    socketServerUrl = null;
+  }
+});
+
 createRoomBtn.addEventListener("click", () => {
   const name = getRequiredName();
   if (!name) {
     return;
   }
 
+  const activeSocket = getSocket();
+  if (!activeSocket) {
+    return;
+  }
+
   showNotice("");
-  socket.emit("create_room", { name }, (response) => {
+  activeSocket.emit("create_room", { name }, (response) => {
     if (!response?.ok) {
       showNotice(response?.error || "Could not create room.");
     }
@@ -338,8 +476,13 @@ joinRoomBtn.addEventListener("click", () => {
     return;
   }
 
+  const activeSocket = getSocket();
+  if (!activeSocket) {
+    return;
+  }
+
   showNotice("");
-  socket.emit("join_room", { name, code }, (response) => {
+  activeSocket.emit("join_room", { name, code }, (response) => {
     if (!response?.ok) {
       showNotice(response?.error || "Could not join room.");
     }
@@ -351,13 +494,18 @@ saveSettingsBtn.addEventListener("click", () => {
     return;
   }
 
+  const activeSocket = getSocket();
+  if (!activeSocket) {
+    return;
+  }
+
   const categories = categoriesInput.value
     .split(/[\n,]+/)
     .map((category) => category.trim())
     .filter(Boolean);
   const roundSeconds = Number(roundSecondsInput.value);
 
-  socket.emit("update_settings", { categories, roundSeconds }, (response) => {
+  activeSocket.emit("update_settings", { categories, roundSeconds }, (response) => {
     if (!response?.ok) {
       showNotice(response?.error || "Could not save settings.");
       return;
@@ -368,7 +516,12 @@ saveSettingsBtn.addEventListener("click", () => {
 });
 
 startRoundBtn.addEventListener("click", () => {
-  socket.emit("start_round", {}, (response) => {
+  const activeSocket = getSocket();
+  if (!activeSocket) {
+    return;
+  }
+
+  activeSocket.emit("start_round", {}, (response) => {
     if (!response?.ok) {
       showNotice(response?.error || "Could not start round.");
     } else {
@@ -382,13 +535,18 @@ submitAnswersBtn.addEventListener("click", () => {
     return;
   }
 
+  const activeSocket = getSocket();
+  if (!activeSocket) {
+    return;
+  }
+
   const answers = {};
   const answerInputs = answersForm.querySelectorAll("input[data-category]");
   answerInputs.forEach((input) => {
     answers[input.dataset.category] = input.value;
   });
 
-  socket.emit("submit_answers", { answers }, (response) => {
+  activeSocket.emit("submit_answers", { answers }, (response) => {
     if (!response?.ok) {
       showNotice(response?.error || "Could not submit answers.");
       return;
@@ -399,7 +557,12 @@ submitAnswersBtn.addEventListener("click", () => {
 });
 
 callStopBtn.addEventListener("click", () => {
-  socket.emit("call_stop", {}, (response) => {
+  const activeSocket = getSocket();
+  if (!activeSocket) {
+    return;
+  }
+
+  activeSocket.emit("call_stop", {}, (response) => {
     if (!response?.ok) {
       showNotice(response?.error || "Could not call STOP.");
       return;
@@ -410,28 +573,18 @@ callStopBtn.addEventListener("click", () => {
 });
 
 leaveRoomBtn.addEventListener("click", () => {
+  if (!socket) {
+    resetLocalRoomState();
+    showNotice("");
+    renderGameState();
+    return;
+  }
+
   socket.emit("leave_room", {}, () => {
-    roomState = null;
-    latestResults = null;
-    activeRoundNumber = null;
-    clearTimer();
+    resetLocalRoomState();
     showNotice("");
     renderGameState();
   });
-});
-
-socket.on("room_state", (nextState) => {
-  roomState = nextState;
-  renderGameState();
-});
-
-socket.on("round_results", (results) => {
-  latestResults = results;
-  renderResults(results);
-});
-
-socket.on("connect_error", () => {
-  showNotice("Could not connect to the server.");
 });
 
 renderGameState();

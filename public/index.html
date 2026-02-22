@@ -22,6 +22,15 @@
           <label for="player-name">Your Name</label>
           <input id="player-name" type="text" maxlength="24" placeholder="Player name" autocomplete="nickname" />
 
+          <label for="server-url">Realtime Server URL</label>
+          <input
+            id="server-url"
+            type="url"
+            placeholder="https://your-backend.onrender.com"
+            autocomplete="url"
+          />
+          <p class="input-hint">Use your backend URL when frontend is deployed on Vercel.</p>
+
           <div class="auth-actions">
             <button id="create-room-btn" class="btn-primary">Create Room</button>
           </div>
@@ -111,7 +120,7 @@
       </section>
     </main>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>
